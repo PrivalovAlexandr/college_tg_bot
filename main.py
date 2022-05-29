@@ -15,7 +15,7 @@ def group_list(corpus: str, course: str):
     return group_list      
 
 def create_keyboard(keyboard_array):
-    if keyboard_array is False:
+    if not keyboard_array:
         keyboard = types.ReplyKeyboardRemove()
     else:
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=4)
