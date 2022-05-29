@@ -45,6 +45,13 @@ def course_chain (user_group: str):
     chain.remove(user_group)
     return chain
 
+def create_msg (group_rasp:dict):
+    #   сборка сообщения с расписанием
+    msg = ''
+    for i in group_rasp:
+        msg += ' | '.join([i, ' '.join([group_rasp[i][0], f"({group_rasp[i][1]})"]), group_rasp[i][2] + '\n'])
+    return msg
+
 def data_base(sql:str, value: tuple = ()):
 #   // отправка запросов к базе данных
     con = sqlite3.connect('tg_bot.db')
@@ -78,16 +85,15 @@ bot = Bot(token=key)
 dp = Dispatcher(bot)
 
 
-#   //    bot    //
+#   //   проверка регистрации    //
 
-@dp.message_handler(lambda message: message['from']['id'] not in cache_dict)
-#   // проверка регистрации
+@dp.message_handler(lambda message: message.from_user.id not in cache_dict)
 async def reg_user(message: types.Message):
-    cache_dict[message['from']['id']] = 1
+    cache_dict[message.from_user.id] = 1
     Trigger['Main'] = False
     await message.answer('Выберите роль', reply_markup=create_keyboard(role))
 
-#   //  основной функционал //
+#   //    главное меню    //
 
 @dp.message_handler(lambda _: Trigger['Main'])
 async def menu(message: types.Message):
@@ -114,14 +120,62 @@ async def menu(message: types.Message):
         switch_trigger('Main', 'Admin')
         await message.answer('Админ', reply_markup=create_keyboard(admin_key))
 
+#    //   расписание   //
+
 @dp.message_handler(lambda _: Trigger['Rasp'])
 async def menu_rasp(message: types.Message):
-    if message.text.capitalize() == '':
-        pass
-    elif message.text.capitalize() == 'Назад':
+    if message.text.capitalize() != 'Назад':
+        switch_trigger('Rasp', 'Date')
+        data_list = get('https://bot-t-s.nttek.ru/rest-api/available').json()
+        memory.append(data_list)
+        
+        if message.text.capitalize() == 'По группам':
+            Trigger['ByGroup'] = True
+        elif message.text.capitalize() == 'По преподавателям':
+            Trigger['ByTeacher'] = True
+        
+        await message.answer(
+            'Выберите дату расписания', 
+            reply_markup=create_keyboard(data_list + ['Назад'])
+        )
+    else:
         switch_trigger('Rasp', 'Main')
         await message.answer('Главное меню', reply_markup = create_keyboard(menu_key))
 
+@dp.message_handler(lambda _: Trigger['Date'])
+async def date_rasp (message: types.Message):
+    if message.text in memory[0]:
+        Trigger['Date'] = False
+        memory.clear()
+        if Trigger['ByGroup']:
+            backup.extend([cache_dict[message.from_user.id], message.text])
+            memory.append('Студент')
+            cache_dict[message.from_user.id] = 2
+            await message.answer('Выберите корпус', reply_markup=create_keyboard(corpus))
+        elif Trigger['ByTeacher']:
+            memory.append(message.text)
+            await message.answer('Введите фамилию преподавателя', reply_markup=create_keyboard(False))
+    elif message.text == 'Назад':
+        switch_trigger('Date', 'Rasp')
+        if Trigger['ByGroup']:
+            Trigger['ByGroup'] = False
+        elif Trigger['Teacher']:
+            Trigger['Teacher'] = False
+        memory.clear()
+        await message.answer('Расписание', reply_markup=create_keyboard(rasp_key))
+
+@dp.message_handler(lambda _: Trigger['ByTeacher'])
+async def teacher_rasp (message: types.Message):
+    switch_trigger('ByTeacher', 'Main')
+    rasp = get(f'https://bot-t-s.nttek.ru/rest-api/teacher/{memory[0]}').json()
+    try:
+        msg = create_msg(rasp[message.text.capitalize()])
+    except KeyError:
+        msg = 'В этот день у преподавателя нет пар'
+    memory.clear()
+    await message.answer(msg, reply_markup=create_keyboard(menu_key))
+
+#    //   профиль    //
 
 @dp.message_handler(lambda _: Trigger['Profile'])
 async def menu_profile(message: types.Message):
@@ -174,6 +228,8 @@ async def change_surname(message: types.Message):
                 Trigger['Send'] = False
                 await message.answer('Введите фамилию ещё раз', reply_markup=create_keyboard(False))
 
+#    //    админ меню    //
+
 @dp.message_handler(lambda _: Trigger['Admin'])
 async def menu_admin(message: types.Message):
     if message.text.capitalize() == '':
@@ -182,7 +238,7 @@ async def menu_admin(message: types.Message):
         switch_trigger('Admin', 'Main')
         await message.answer('Главное меню', reply_markup = create_keyboard(menu_key))
 
-#   // регистрация  //
+#    //    регистрация    //
 
 @dp.message_handler(lambda message:cache_dict[message.from_user.id] == 1)
 async def reg_role(message: types.Message):
@@ -232,10 +288,19 @@ async def reg_course (message: types.Message):
 async def reg_group(message: types.Message):
     if message.text.upper() in memory[3]:
         memory[3] = message.text.upper()
-        cache_dict[message.from_user.id] = 5
-        await message.answer(
-            f'Вы хотете завершить регистрацию с этими данными?\n\nРоль: {memory[0]}\nГруппа: {memory[3]}',
-            reply_markup=create_keyboard(['Да', 'Нет']))
+        if Trigger['ByGroup']:
+            switch_trigger('ByGroup', 'Main')
+            rasp = get(f'https://bot-t-s.nttek.ru/rest-api/group/{backup[1]}').json()
+            msg = create_msg(rasp[memory[1]][memory[3]])
+            cache_dict[message.from_user.id] = backup[0]
+            backup.clear()
+            memory.clear()
+            await message.answer(msg, reply_markup=create_keyboard(menu_key))
+        else:
+            cache_dict[message.from_user.id] = 5
+            await message.answer(
+                f'Вы хотете завершить регистрацию с этими данными?\n\nРоль: {memory[0]}\nГруппа: {memory[3]}',
+                reply_markup=create_keyboard(['Да', 'Нет']))
 
 @dp.message_handler(lambda message: cache_dict[message.from_user.id] == 5)
 async def reg_confirm (message: types.Message):

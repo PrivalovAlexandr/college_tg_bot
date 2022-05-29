@@ -9,8 +9,13 @@ Trigger = {
     'Rasp': False,
     'Profile': False,
     'Admin': False,
+    #   профиль
     'Change_course': False,
-    'Change_surname': False
+    'Change_surname': False,
+    #   расписание
+    'Date': False,
+    'ByGroup': False,
+    'ByTeacher': False
 }
 
 admin_list = [
@@ -20,6 +25,7 @@ admin_list = [
 
 cache_dict = {}
 memory = []
+backup = []
 
 #   //    инофрмация о пользователе   //
 
