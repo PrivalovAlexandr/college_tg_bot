@@ -111,12 +111,12 @@ async def admin_menu(message: types.Message):
                 if command[3] == 'byid':
                     try:
                         needed_id = int(command[2])
+                        if needed_id in cache_dict and len(cache_dict[needed_id]) > 2:
+                            msg = 'Пользователь зарегестрирован'
+                        else:
+                            msg = 'Пользователь не зарегистрирован'
                     except ValueError:
                         await message.answer('id состоит из цифр так то')
-                    if needed_id in cache_dict and len(cache_dict[needed_id]) > 2:
-                        msg = 'Пользователь зарегестрирован'
-                    else:
-                        msg = 'Пользователь не зарегистрирован'
                 else:
                     if command[3] == 'byusername':
                         s = data_base(
@@ -165,21 +165,22 @@ async def admin_menu(message: types.Message):
                     if command[3] == 'byid':
                         try:
                             needed_id = int(command[2])
-                        except ValueError:
-                            await message.answer('id состоит из цифр так то')
-                        i = data_base("SELECT * FROM users WHERE `id`=?", (needed_id,))
-                        if i:
-                            s = data_base("SELECT * FROM admin WHERE `id`=?", (needed_id,))
-                            if not s:
-                                data_base('INSERT INTO admin VALUES(?)', (needed_id, ))
-                                await message.answer(
-                                    f'Пользователь с id {needed_id} добавлен к администраторам')
+                            i = data_base("SELECT * FROM users WHERE `id`=?", (needed_id,))
+                            if i:
+                                s = data_base("SELECT * FROM admin WHERE `id`=?", (needed_id,))
+                                if not s:
+                                    admin_list.append(needed_id)
+                                    data_base('INSERT INTO admin VALUES(?)', (needed_id, ))
+                                    await message.answer(
+                                        f'Пользователь с id {needed_id} добавлен к администраторам')
+                                else:
+                                    await message.answer(
+                                        f'Пользователь с id {needed_id} уже является администратором')
                             else:
                                 await message.answer(
-                                    f'Пользователь с id {needed_id} уже является администратором')
-                        else:
-                            await message.answer(
-                                f'Пользователь с id {needed_id} не зарегистрирован')
+                                    f'Пользователь с id {needed_id} не зарегистрирован')
+                        except ValueError:
+                            await message.answer('id состоит из цифр так то')
                     elif command[3] == 'byusername':
                         s = data_base(
                             "SELECT id FROM users WHERE `username` = ?", 
@@ -187,6 +188,7 @@ async def admin_menu(message: types.Message):
                         if s:
                             s_2 = data_base("SELECT id FROM admin WHERE `id`=?", (s[0],))
                             if not s:
+                                admin_list.append(s[0])
                                 data_base('INSERT INTO admin VALUES(?)', (s[0], ))
                                 await message.answer(
                                     f'Пользователь с username @{command[2]} добавлен к администраторам')
@@ -202,36 +204,40 @@ async def admin_menu(message: types.Message):
                     if command[3] == 'byid':
                         try:
                             needed_id = int(command[2])
+                            if needed_id != 459267180:
+                                i = data_base("SELECT * FROM users WHERE `id`=?", (needed_id,))
+                                if i:
+                                    s = data_base("SELECT id FROM admin WHERE `id`=?", (needed_id,))
+                                    if s:
+                                        admin_list.remove(needed_id)
+                                        data_base(
+                                            "DELETE from admin WHERE id = ?", 
+                                            (needed_id,))
+                                        await message.answer(
+                                            f'Пользователь с id {needed_id} был удален из администраторов')
+                                    else:
+                                        await message.answer(
+                                            f'Пользователь с id {needed_id} не является администратором')
+                                else:
+                                    await message.answer(
+                                        f'Пользователь с id {needed_id} не зарегистрирован')
                         except ValueError:
                             await message.answer('id состоит из цифр так то')
-                        i = data_base("SELECT * FROM users WHERE `id`=?", (needed_id,))
-                        if i:
-                            s = data_base("SELECT id FROM admin WHERE `id`=?", (needed_id,))
-                            if s:
-                                data_base(
-                                    "DELETE from admin WHERE id = ?", 
-                                    (needed_id,))
-                                await message.answer(
-                                    f'Пользователь с id {needed_id} был удален из администраторов')
-                            else:
-                                await message.answer(
-                                    f'Пользователь с id {needed_id} не является администратором')
-                        else:
-                            await message.answer(
-                                f'Пользователь с id {needed_id} не зарегистрирован')
                     elif command[3] == 'byusername':
                         s = data_base(
                             "SELECT id FROM users WHERE `username` = ?", 
                             (command[2],))
                         if s:
-                            s_2 = data_base("SELECT id FROM admin WHERE `id`=?", (s[0],))
-                            if not s_2:
-                                data_base('DELETE from admin VALUES(?)', (s[0], ))
-                                await message.answer(
-                                    f'Пользователь с username @{command[2]} был удален из администраторов')
-                            else:
-                                await message.answer(
-                                    f'Пользователь с username @{command[2]} не является администратором')
+                            if s[0] != 459267180:
+                                s_2 = data_base("SELECT id FROM admin WHERE `id`=?", (s[0],))
+                                if not s_2:
+                                    admin_list.remove(s[0])
+                                    data_base('DELETE from admin VALUES(?)', (s[0], ))
+                                    await message.answer(
+                                        f'Пользователь с username @{command[2]} был удален из администраторов')
+                                else:
+                                    await message.answer(
+                                        f'Пользователь с username @{command[2]} не является администратором')
                         else:
                             await message.answer(
                                 f'Пользователь с username @{command[2]} не зарегистрирован')
@@ -293,7 +299,7 @@ async def change_course(message: types.Message):
             (message.text.upper(), id))
         user_trigger[id]['Change_course'] = False
         user_trigger[id]['Menu'] = True
-        await message.answer('Главное меню', reply_markup=kb_menu)
+        await message.answer('Ваш курс был успешно изменен', reply_markup=kb_menu)
 
 @dp.message_handler(lambda message:
     (user_trigger[message.from_user.id]['Change_surname']))
